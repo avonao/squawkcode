@@ -1,0 +1,13 @@
+{
+  "srcDirs": ["components/site"],
+  "keep": ["hidden", "container", "sr-only"],
+  "keepPrefixes": ["slide-"],
+  "ambiguous": { "open": "keep", "components/site/nav.tsx:title": "class" },
+  "build": { "cmd": "npm run build" },
+  "serve": { "cmd": "npx next start -p {port}", "readyPath": "/", "portPlain": 4610, "portHashed": 4611 },
+  "compare": {
+    "pages": ["/", "/pricing"],
+    "states": { "light": "", "dark": "dark", "hc": "hc" },
+    "actions": [{ "name": "menu", "eval": "document.querySelector('[aria-label=Menu]').click()" }]
+  }
+}
