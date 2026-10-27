@@ -1,0 +1,12 @@
+{
+  "name": "classhash",
+  "version": "0.1.0",
+  "description": "Hash CSS class names in a copy of a site's source before deploy, and prove the look did not change.",
+  "type": "module",
+  "bin": { "classhash": "bin/classhash.mjs" },
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "peerDependencies": { "postcss": ">=8", "typescript": ">=5" },
+  "license": "UNLICENSED",
+  "private": true
+}
