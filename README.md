@@ -23,5 +23,10 @@ classhash compare --config f --a http://localhost:4610 --b http://localhost:4611
 ```
 See `classhash.config.example.json`. Deploy from the hashed tree the gate prints on PASS.
 
+`compare` loads the two copies side by side, in two headless Chrome instances with separate profiles. Computed values
+that differ only in how a colour is written (`rgb(169, 169, 169)` and `lab(69.2378 0 0)`) count as equal when the
+colours are within `colourTolerance` ΔE (default 0.02). `hover.viewports` lists the viewports to hover at (default:
+every viewport except one named `mobile`).
+
 ## Limits
 Classes assembled at runtime, set by third-party code, or referenced by external tools must be listed in `keep`/`keepPrefixes`. The compare gate covers only the pages, states and actions you configure.

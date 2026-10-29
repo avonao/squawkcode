@@ -1,13 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchChrome, sleep } from './cdp.mjs';
+import { sameUpToColours } from './colour.mjs';
 
 const DEFAULTS = {
   pages: ['/'],
   viewports: { desktop: [1440, 900, false], mobile: [390, 844, true] },
   states: { light: '', dark: 'dark' },         // html classes added for the capture
   actions: [],                                  // [{ name, eval }]: run in the page, then capture the whole document ("light" state)
-  hover: { max: 30, perElement: 40 },           // hover up to `max` links/buttons per page and compare them and their first descendants
+  hover: { max: 30, perElement: 40, viewports: null }, // hover up to `max` links/buttons per page and compare them and their first descendants
+                                                // (viewports: names to hover at; null = every viewport except "mobile")
+  colourTolerance: 0.02,                        // ΔE (CIE76, lab) under which two colours count as equal: rgb(169, 169, 169) = lab(69.2378 0 0)
   ignoreProps: ['^--', '^-webkit-text-fill', 'perspective-origin', 'transform-origin'], // regex on property names
   scrollThrough: true,
   reducedMotion: true,
@@ -58,7 +61,8 @@ async function capturePage(c, base, page, vpName, vp, cfg) {
     try { await c.evaluate(a.eval); } catch (e) { out.set(`${page}|${vpName}|action:${a.name}`, { props: [], rows: [], error: e.message }); continue; }
     await sleep(500); out.set(`${page}|${vpName}|action:${a.name}`, await c.evaluate(COLLECT));
   }
-  if (cfg.hover && cfg.hover.max > 0 && vpName !== 'mobile') {
+  const hoverHere = cfg.hover.viewports ? cfg.hover.viewports.includes(vpName) : vpName !== 'mobile';
+  if (cfg.hover && cfg.hover.max > 0 && hoverHere) {
     await open(); await setState(c, firstState);
     const n = await c.evaluate(`${HOVER_TARGETS}().length`);
     const step = Math.max(1, Math.floor(n / cfg.hover.max));
@@ -88,7 +92,10 @@ function diffEntry(A, B, cfg, hostsA, hostsB) {
       if (va === vb) continue;
       if (!ra[key] || !rb[key]) { diffs.push({ where: ra.p, detail: `${key} exists on one side only` }); continue; }
       const xa = va.split('|'), xb = vb.split('|'); const d = [];
-      xa.forEach((v, k) => { if (v !== xb[k] && !skipIdx.has(k)) d.push(`${A.props[k]}: ${v.slice(0, 60)} → ${xb[k].slice(0, 60)}`); });
+      xa.forEach((v, k) => {
+        if (v === xb[k] || skipIdx.has(k) || sameUpToColours(v, xb[k], cfg.colourTolerance)) return;
+        d.push(`${A.props[k]}: ${v.slice(0, 60)} → ${xb[k].slice(0, 60)}`);
+      });
       if (d.length) diffs.push({ where: `${ra.p}${key === 'v' ? '' : key}`, detail: d.slice(0, 4).join('; ') });
     }
   });
@@ -99,14 +106,14 @@ export async function compareSites(userCfg, { a, b, out } = {}) {
   if (!a || !b) throw new Error('classhash compare needs --a and --b (base URLs of the two copies)');
   const cfg = { ...DEFAULTS, ...userCfg, hover: { ...DEFAULTS.hover, ...(userCfg.hover || {}) } };
   ALLSTATE = cfg.states;
-  const c = await launchChrome(cfg.chrome);
+  // One browser per side, each with its own profile: A and B load in parallel and share no cookies or storage.
+  const [ca, cb] = await Promise.all([launchChrome(cfg.chrome), launchChrome(cfg.chrome)]);
   const report = []; let total = 0;
   try {
     for (const page of cfg.pages) for (const [vpName, vp] of Object.entries(cfg.viewports)) {
       let persistent = null;
       for (let attempt = 0; attempt <= cfg.retries; attempt++) {
-        const A = await capturePage(c, a, page, vpName, vp, cfg);
-        const B = await capturePage(c, b, page, vpName, vp, cfg);
+        const [A, B] = await Promise.all([capturePage(ca, a, page, vpName, vp, cfg), capturePage(cb, b, page, vpName, vp, cfg)]);
         const found = new Map();
         for (const [key, ea] of A) { const eb = B.get(key); if (!eb) { found.set(key, [{ where: 'missing', detail: 'capture missing on side B' }]); continue; } const d = diffEntry(ea, eb, cfg, a, b); if (d.length) found.set(key, d); }
         // a difference only counts when it shows up in every attempt
@@ -116,7 +123,7 @@ export async function compareSites(userCfg, { a, b, out } = {}) {
       for (const [key, d] of persistent) { total += d.length; report.push({ key, diffs: d }); }
       console.log(`${persistent.size ? 'DIFF' : 'ok  '} ${page} ${vpName}${persistent.size ? ` (${[...persistent.keys()].map((k) => k.split('|')[2]).join(', ')})` : ''}`);
     }
-  } finally { c.close(); }
+  } finally { ca.close(); cb.close(); }
   if (out) { fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true }); fs.writeFileSync(out, JSON.stringify(report, null, 2)); }
   for (const r of report.slice(0, cfg.maxReport)) { console.log(`\n${r.key}`); for (const d of r.diffs.slice(0, 4)) console.log(`  ${d.where}  ${d.detail}`); }
   console.log(total ? `\n${total} difference(s) in ${report.length} capture(s)` : '\nno differences');
