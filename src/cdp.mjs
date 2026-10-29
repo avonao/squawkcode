@@ -12,6 +12,13 @@ const CHROME_CANDIDATES = [
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
 ].filter(Boolean);
 
+// Every Chrome this process started, stopped with it: a run that is interrupted (Ctrl-C, a killed task) would otherwise
+// leave its headless browsers running.
+const running = new Set();
+const stopAll = () => { for (const p of running) p.kill(); };
+process.on('exit', stopAll);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => { stopAll(); process.exit(128 + os.constants.signals[signal]); });
+
 export async function launchChrome(explicit) {
   const bin = [explicit, ...CHROME_CANDIDATES].filter(Boolean).find((p) => fs.existsSync(p));
   if (!bin) throw new Error('classhash: no Chrome found — set CLASSHASH_CHROME or config.compare.chrome');
@@ -20,6 +27,7 @@ export async function launchChrome(explicit) {
   // Two instances capture side by side (compare runs A and B at once): keep a page that is not in front at full speed.
   const quiet = ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'];
   const proc = spawn(bin, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', '--hide-scrollbars', ...quiet, 'about:blank'], { stdio: 'ignore' });
+  running.add(proc); proc.on('exit', () => running.delete(proc));
   for (let i = 0; i < 80; i++) { try { await fetch(`http://localhost:${port}/json/version`); break; } catch { await sleep(150); } }
   const tab = await (await fetch(`http://localhost:${port}/json/new?about:blank`, { method: 'PUT' })).json();
   const ws = new WebSocket(tab.webSocketDebuggerUrl);

@@ -20,14 +20,36 @@ const DEFAULTS = {
   chrome: null,
 };
 
-const COLLECT = `(() => {
-  const props = [...getComputedStyle(document.documentElement)].sort();
+// A whole page's computed styles are tens of megabytes (2,600 elements × 760 properties), too much to move over CDP
+// for every state. The page sends one hash per element (and per ::before / ::after) of its values, with the ignored
+// properties left out and its own origin written as H; `detail` lists the elements whose values it also sends, which
+// compareSites asks for once hashes have differed.
+const collect = (ignore, detail) => `(() => {
+  const ignore = ${JSON.stringify(ignore)}.map((r) => new RegExp(r));
+  const want = new Set(${JSON.stringify(detail ?? [])});
+  const props = [...getComputedStyle(document.documentElement)].filter((p) => !ignore.some((r) => r.test(p))).sort();
   const skip = new Set(['SCRIPT','STYLE','LINK','META','TITLE','HEAD','NOSCRIPT']);
   const els = [...document.querySelectorAll('*')].filter(e => !skip.has(e.tagName));
-  const row = (e) => {
-    const cs = getComputedStyle(e);
-    const r = { t: e.tagName, p: e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).slice(0,3).join('.') : ''), v: props.map(k => cs.getPropertyValue(k)).join('|') };
-    for (const ps of ['::before','::after']) { const c = getComputedStyle(e, ps); if (c.content && c.content !== 'none' && c.content !== 'normal') r[ps] = props.map(k => c.getPropertyValue(k)).join('|'); }
+  const host = location.origin;
+  const read = (cs) => props.map((k) => cs.getPropertyValue(k)).join('|').split(host).join('H');
+  const h53 = (str) => {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  };
+  const row = (e, i) => {
+    const v = read(getComputedStyle(e));
+    const r = { t: e.tagName, p: e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).slice(0,3).join('.') : ''), h: h53(v) };
+    if (want.has(i)) r.v = v;
+    for (const ps of ['::before','::after']) {
+      const c = getComputedStyle(e, ps);
+      if (!c.content || c.content === 'none' || c.content === 'normal') continue;
+      const pv = read(c);
+      r[ps + '#'] = h53(pv);
+      if (want.has(i)) r[ps] = pv;
+    }
     return r;
   };
   return { props, rows: els.map(row) };
@@ -44,8 +66,9 @@ async function gotoReady(c, url, settleMs) {
 const setState = (c, cls) => c.evaluate(`(()=>{const l=document.documentElement.classList; for (const k of ${JSON.stringify(Object.values(ALLSTATE))}) k.split(' ').filter(Boolean).forEach(x=>l.remove(x)); '${cls}'.split(' ').filter(Boolean).forEach(x=>l.add(x)); document.getAnimations().forEach(a=>{try{a.cancel()}catch{}});})()`);
 let ALLSTATE = {};
 
-async function capturePage(c, base, page, vpName, vp, cfg) {
+async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   const out = new Map(); // key -> {props, rows}
+  const COLLECT = (key) => collect(cfg.ignoreProps, detail.get(key));
   await c.send('Emulation.setDeviceMetricsOverride', { width: vp[0], height: vp[1], deviceScaleFactor: 1, mobile: !!vp[2] });
   if (cfg.reducedMotion) await c.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   const open = async () => {
@@ -54,12 +77,13 @@ async function capturePage(c, base, page, vpName, vp, cfg) {
     await sleep(400);
   };
   await open();
-  for (const [sn, cls] of Object.entries(cfg.states)) { await setState(c, cls); await sleep(250); out.set(`${page}|${vpName}|${sn}`, await c.evaluate(COLLECT)); }
+  for (const [sn, cls] of Object.entries(cfg.states)) { await setState(c, cls); await sleep(250); const key = `${page}|${vpName}|${sn}`; out.set(key, await c.evaluate(COLLECT(key))); }
   const firstState = Object.values(cfg.states)[0] ?? '';
   for (const a of cfg.actions) {
     await open(); await setState(c, firstState);
     try { await c.evaluate(a.eval); } catch (e) { out.set(`${page}|${vpName}|action:${a.name}`, { props: [], rows: [], error: e.message }); continue; }
-    await sleep(500); out.set(`${page}|${vpName}|action:${a.name}`, await c.evaluate(COLLECT));
+    const key = `${page}|${vpName}|action:${a.name}`;
+    await sleep(500); out.set(key, await c.evaluate(COLLECT(key)));
   }
   const hoverHere = cfg.hover.viewports ? cfg.hover.viewports.includes(vpName) : vpName !== 'mobile';
   if (cfg.hover && cfg.hover.max > 0 && hoverHere) {
@@ -87,19 +111,35 @@ function diffEntry(A, B, cfg, hostsA, hostsB) {
   A.rows.forEach((ra, i) => {
     const rb = B.rows[i];
     if (ra.t !== rb.t) { diffs.push({ where: ra.p, detail: `tag ${ra.t} vs ${rb.t}` }); return; }
+    // Hashed rows (whole-page captures): equal hashes are equal styles; a differing one is read in full on the next pass.
+    if (ra.h !== undefined) {
+      for (const [hk, vk] of [['h', 'v'], ['::before#', '::before'], ['::after#', '::after']]) {
+        if (ra[hk] === rb[hk]) continue;
+        if (ra[hk] === undefined || rb[hk] === undefined) { diffs.push({ where: `${ra.p}${vk === 'v' ? '' : vk}`, detail: `${vk} exists on one side only`, idx: i, full: true }); continue; }
+        if (ra[vk] === undefined || rb[vk] === undefined) { diffs.push({ where: `${ra.p}${vk === 'v' ? '' : vk}`, detail: 'computed style differs', idx: i }); continue; }
+        const d = valueDiffs(A.props, ra[vk], rb[vk], new Set(), cfg);
+        if (d.length) diffs.push({ where: `${ra.p}${vk === 'v' ? '' : vk}`, detail: d.slice(0, 4).join('; '), idx: i, full: true });
+      }
+      return;
+    }
     for (const key of ['v', '::before', '::after']) {
       const va = norm(ra[key], hostsA), vb = norm(rb[key], hostsB);
       if (va === vb) continue;
       if (!ra[key] || !rb[key]) { diffs.push({ where: ra.p, detail: `${key} exists on one side only` }); continue; }
-      const xa = va.split('|'), xb = vb.split('|'); const d = [];
-      xa.forEach((v, k) => {
-        if (v === xb[k] || skipIdx.has(k) || sameUpToColours(v, xb[k], cfg.colourTolerance)) return;
-        d.push(`${A.props[k]}: ${v.slice(0, 60)} → ${xb[k].slice(0, 60)}`);
-      });
-      if (d.length) diffs.push({ where: `${ra.p}${key === 'v' ? '' : key}`, detail: d.slice(0, 4).join('; ') });
+      const d = valueDiffs(A.props, va, vb, skipIdx, cfg);
+      if (d.length) diffs.push({ where: `${ra.p}${key === 'v' ? '' : key}`, detail: d.slice(0, 4).join('; '), full: true });
     }
   });
   return diffs;
+}
+
+function valueDiffs(props, va, vb, skipIdx, cfg) {
+  const xa = va.split('|'), xb = vb.split('|'); const d = [];
+  xa.forEach((v, k) => {
+    if (v === xb[k] || skipIdx.has(k) || sameUpToColours(v, xb[k], cfg.colourTolerance)) return;
+    d.push(`${props[k]}: ${v.slice(0, 60)} → ${xb[k].slice(0, 60)}`);
+  });
+  return d;
 }
 
 export async function compareSites(userCfg, { a, b, out } = {}) {
@@ -112,13 +152,20 @@ export async function compareSites(userCfg, { a, b, out } = {}) {
   try {
     for (const page of cfg.pages) for (const [vpName, vp] of Object.entries(cfg.viewports)) {
       let persistent = null;
-      for (let attempt = 0; attempt <= cfg.retries; attempt++) {
-        const [A, B] = await Promise.all([capturePage(ca, a, page, vpName, vp, cfg), capturePage(cb, b, page, vpName, vp, cfg)]);
+      let detail = new Map(); // key -> element indices to read in full
+      for (let attempt = 0; ; attempt++) {
+        const [A, B] = await Promise.all([capturePage(ca, a, page, vpName, vp, cfg, detail), capturePage(cb, b, page, vpName, vp, cfg, detail)]);
         const found = new Map();
         for (const [key, ea] of A) { const eb = B.get(key); if (!eb) { found.set(key, [{ where: 'missing', detail: 'capture missing on side B' }]); continue; } const d = diffEntry(ea, eb, cfg, a, b); if (d.length) found.set(key, d); }
-        // a difference only counts when it shows up in every attempt
-        persistent = persistent ? new Map([...found].filter(([k, d]) => persistent.has(k) && persistent.get(k).some((x) => d.some((y) => y.where === x.where && y.detail === x.detail)))) : found;
+        // a difference only counts when the same element differs in every attempt
+        persistent = persistent
+          ? new Map([...found].filter(([k]) => persistent.has(k)).map(([k, d]) => [k, d.filter((y) => persistent.get(k).some((x) => x.where === y.where))]).filter(([, d]) => d.length))
+          : found;
         if (!persistent.size) break;
+        // Retries as configured; then one more pass if a difference is still only known by its hash.
+        const unread = [...persistent.values()].some((d) => d.some((x) => !x.full));
+        if (attempt >= cfg.retries && (!unread || attempt > cfg.retries)) break;
+        detail = new Map([...persistent].map(([k, d]) => [k, [...new Set(d.filter((x) => x.idx !== undefined).map((x) => x.idx))]]));
       }
       for (const [key, d] of persistent) { total += d.length; report.push({ key, diffs: d }); }
       console.log(`${persistent.size ? 'DIFF' : 'ok  '} ${page} ${vpName}${persistent.size ? ` (${[...persistent.keys()].map((k) => k.split('|')[2]).join(', ')})` : ''}`);
