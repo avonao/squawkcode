@@ -23,11 +23,11 @@ const DEFAULTS = {
 // A whole page's computed styles are tens of megabytes (2,600 elements × 760 properties), too much to move over CDP
 // for every state. The page sends one hash per element (and per ::before / ::after) of its values, with the ignored
 // properties left out and its own origin written as H; `detail` lists the elements whose values it also sends, which
-// compareSites asks for once hashes have differed.
-const collect = (ignore, detail) => `(() => {
+// compareSites asks for once hashes have differed. `props` is the property list both browsers share (compareSites).
+const collect = (ignore, detail, props) => `(() => {
   const ignore = ${JSON.stringify(ignore)}.map((r) => new RegExp(r));
   const want = new Set(${JSON.stringify(detail ?? [])});
-  const props = [...getComputedStyle(document.documentElement)].filter((p) => !ignore.some((r) => r.test(p))).sort();
+  const props = (${JSON.stringify(props ?? null)} ?? [...getComputedStyle(document.documentElement)]).filter((p) => !ignore.some((r) => r.test(p))).sort();
   const skip = new Set(['SCRIPT','STYLE','LINK','META','TITLE','HEAD','NOSCRIPT']);
   const els = [...document.querySelectorAll('*')].filter(e => !skip.has(e.tagName));
   const host = location.origin;
@@ -68,7 +68,7 @@ let ALLSTATE = {};
 
 async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   const out = new Map(); // key -> {props, rows}
-  const COLLECT = (key) => collect(cfg.ignoreProps, detail.get(key));
+  const COLLECT = (key) => collect(cfg.ignoreProps, detail.get(key), cfg.props);
   await c.send('Emulation.setDeviceMetricsOverride', { width: vp[0], height: vp[1], deviceScaleFactor: 1, mobile: !!vp[2] });
   if (cfg.reducedMotion) await c.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   const open = async () => {
@@ -104,6 +104,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
 function diffEntry(A, B, cfg, hostsA, hostsB) {
   const norm = (s, hosts) => (s ?? '').split(hosts).join('H');
   if (A.error || B.error) return [{ where: 'action', detail: A.error || B.error }];
+  if (A.props.join() !== B.props.join()) return [{ where: 'properties', detail: 'the two captures list different properties' }];
   if (A.rows.length !== B.rows.length) return [{ where: 'structure', detail: `${A.rows.length} elements vs ${B.rows.length}` }];
   const ignore = cfg.ignoreProps.map((r) => new RegExp(r));
   const skipIdx = new Set(A.props.map((p, i) => (ignore.some((r) => r.test(p)) ? i : -1)).filter((i) => i >= 0));
@@ -150,6 +151,12 @@ export async function compareSites(userCfg, { a, b, out } = {}) {
   const [ca, cb] = await Promise.all([launchChrome(cfg.chrome), launchChrome(cfg.chrome)]);
   const report = []; let total = 0;
   try {
+    // Values are compared by position, so both sides read the same properties: the ones both browsers know. Two
+    // launches of one Chrome can differ (an experimental property enabled in one profile only).
+    const [la, lb] = await Promise.all([ca, cb].map((c) => c.evaluate('[...getComputedStyle(document.documentElement)].filter((p) => !p.startsWith("--"))')));
+    cfg.props = la.filter((p) => lb.includes(p));
+    const odd = [...la.filter((p) => !lb.includes(p)).map((p) => `${p} (A only)`), ...lb.filter((p) => !la.includes(p)).map((p) => `${p} (B only)`)];
+    if (odd.length) console.warn(`classhash: the two browsers support different properties, left out of the comparison: ${odd.join(', ')}`);
     for (const page of cfg.pages) for (const [vpName, vp] of Object.entries(cfg.viewports)) {
       let persistent = null;
       let detail = new Map(); // key -> element indices to read in full
