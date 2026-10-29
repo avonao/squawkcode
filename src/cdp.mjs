@@ -26,7 +26,9 @@ export async function launchChrome(explicit) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'classhash-chrome-'));
   // Two instances capture side by side (compare runs A and B at once): keep a page that is not in front at full speed.
   const quiet = ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'];
-  const proc = spawn(bin, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', '--hide-scrollbars', ...quiet, 'about:blank'], { stdio: 'ignore' });
+  // No field trials and no seed or component downloads, so every launch has the same web platform features.
+  const fixed = ['--disable-field-trial-config', '--disable-background-networking', '--disable-component-update'];
+  const proc = spawn(bin, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--no-first-run', '--hide-scrollbars', ...quiet, ...fixed, 'about:blank'], { stdio: 'ignore' });
   running.add(proc); proc.on('exit', () => running.delete(proc));
   for (let i = 0; i < 80; i++) { try { await fetch(`http://localhost:${port}/json/version`); break; } catch { await sleep(150); } }
   const tab = await (await fetch(`http://localhost:${port}/json/new?about:blank`, { method: 'PUT' })).json();
