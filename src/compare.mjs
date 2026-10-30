@@ -15,6 +15,9 @@ const DEFAULTS = {
   scrollThrough: true,
   reducedMotion: true,
   settleMs: 2500,
+  readyWhen: null,                              // expression evaluated in the page after it settles; capture waits until it is true
+                                                // (e.g. an iframe's ready class), at most readyTimeoutMs
+  readyTimeoutMs: 20000,
   retries: 1,                                   // pages with differences are captured again and only persistent ones count
   maxReport: 15,
   chrome: null,
@@ -58,10 +61,17 @@ const collect = (ignore, detail, props) => `(() => {
 const HOVER_TARGETS = `(() => [...document.querySelectorAll('a[href], button, summary, [role="button"], input, select')]
   .filter(e => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 2 && r.height > 2 && cs.visibility !== 'hidden' && cs.display !== 'none'; }))`;
 
-async function gotoReady(c, url, settleMs) {
+async function gotoReady(c, url, cfg) {
   await c.send('Page.navigate', { url });
-  await sleep(settleMs);
+  await sleep(cfg.settleMs);
   for (let i = 0; i < 30; i++) { if (await c.evaluate('document.readyState') === 'complete') break; await sleep(250); }
+  // A page that finishes after load (an iframe, a client fetch) is captured once it says so; the two sides can be far
+  // apart in time when one server is busier.
+  if (cfg.readyWhen) {
+    for (const end = Date.now() + cfg.readyTimeoutMs; Date.now() < end; await sleep(250)) {
+      if (await c.evaluate(`!!(${cfg.readyWhen})`)) break;
+    }
+  }
 }
 const setState = (c, cls) => c.evaluate(`(()=>{const l=document.documentElement.classList; for (const k of ${JSON.stringify(Object.values(ALLSTATE))}) k.split(' ').filter(Boolean).forEach(x=>l.remove(x)); '${cls}'.split(' ').filter(Boolean).forEach(x=>l.add(x)); document.getAnimations().forEach(a=>{try{a.cancel()}catch{}});})()`);
 let ALLSTATE = {};
@@ -72,7 +82,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   await c.send('Emulation.setDeviceMetricsOverride', { width: vp[0], height: vp[1], deviceScaleFactor: 1, mobile: !!vp[2] });
   if (cfg.reducedMotion) await c.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   const open = async () => {
-    await gotoReady(c, base + page, cfg.settleMs);
+    await gotoReady(c, base + page, cfg);
     if (cfg.scrollThrough) await c.evaluate(`(async()=>{for(let y=0;y<document.body.scrollHeight;y+=600){window.scrollTo(0,y);await new Promise(r=>setTimeout(r,50));}window.scrollTo(0,0);})()`);
     await sleep(400);
   };
