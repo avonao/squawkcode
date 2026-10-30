@@ -8,8 +8,9 @@ const DEFAULTS = {
   viewports: { desktop: [1440, 900, false], mobile: [390, 844, true] },
   states: { light: '', dark: 'dark' },         // html classes added for the capture
   actions: [],                                  // [{ name, eval }]: run in the page, then capture the whole document ("light" state)
-  hover: { max: 30, perElement: 40, viewports: null }, // hover up to `max` links/buttons per page and compare them and their first descendants
-                                                // (viewports: names to hover at; null = every viewport except "mobile")
+  hover: { max: 30, perElement: 40, viewports: null, selector: null }, // hover up to `max` links/buttons per page and compare them and their first descendants
+                                                // (viewports: names to hover at; null = every viewport except "mobile";
+                                                // selector: which elements to hover, null = links, buttons and fields)
   colourTolerance: 0.02,                        // ΔE (CIE76, lab) under which two colours count as equal: rgb(169, 169, 169) = lab(69.2378 0 0)
   ignoreProps: ['^--', '^-webkit-text-fill', 'perspective-origin', 'transform-origin'], // regex on property names
   scrollThrough: true,
@@ -66,8 +67,10 @@ export const collect = (ignore, detail, props) => `(() => {
   return { props, rows: els.map(row) };
 })()`;
 
-const HOVER_TARGETS = `(() => [...document.querySelectorAll('a[href], button, summary, [role="button"], input, select')]
+const HOVER_SELECTOR = 'a[href], button, summary, [role="button"], input, select';
+const hoverTargets = (sel) => `(() => [...document.querySelectorAll(${JSON.stringify(sel)})]
   .filter(e => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 2 && r.height > 2 && cs.visibility !== 'hidden' && cs.display !== 'none'; }))`;
+const HOVER_TARGETS = hoverTargets(HOVER_SELECTOR);
 
 async function gotoReady(c, url, cfg) {
   await c.send('Page.navigate', { url });
@@ -112,6 +115,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   }
   const hoverHere = cfg.hover.viewports ? cfg.hover.viewports.includes(vpName) : vpName !== 'mobile';
   if (cfg.hover && cfg.hover.max > 0 && hoverHere) {
+    const HOVER_TARGETS = hoverTargets(cfg.hover.selector ?? HOVER_SELECTOR);
     await open(); await setState(c, firstState);
     // The same properties as the page captures: shared by both browsers, ignored ones and custom properties left out.
     const ignore = cfg.ignoreProps.map((r) => new RegExp(r));
