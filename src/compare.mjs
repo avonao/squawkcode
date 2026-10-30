@@ -151,7 +151,7 @@ function diffEntry(A, B, cfg, hostsA, hostsB) {
       if (va === vb) continue;
       if (!ra[key] || !rb[key]) { diffs.push({ where: ra.p, detail: `${key} exists on one side only` }); continue; }
       const d = valueDiffs(A.props, va, vb, skipIdx, cfg);
-      if (d.length) diffs.push({ where: `${ra.p}${key === 'v' ? '' : key}`, detail: d.slice(0, 4).join('; '), full: true });
+      if (d.length) diffs.push({ where: `${ra.p}${key === 'v' ? '' : key}`, detail: d.slice(0, 4).join('; '), idx: i, full: true });
     }
   });
   return diffs;
@@ -187,9 +187,9 @@ export async function compareSites(userCfg, { a, b, out } = {}) {
         const [A, B] = await Promise.all([capturePage(ca, a, page, vpName, vp, cfg, detail), capturePage(cb, b, page, vpName, vp, cfg, detail)]);
         const found = new Map();
         for (const [key, ea] of A) { const eb = B.get(key); if (!eb) { found.set(key, [{ where: 'missing', detail: 'capture missing on side B' }]); continue; } const d = diffEntry(ea, eb, cfg, a, b); if (d.length) found.set(key, d); }
-        // a difference only counts when the same element differs in every attempt
+        // a difference only counts when the same element (label and position) differs in every attempt
         persistent = persistent
-          ? new Map([...found].filter(([k]) => persistent.has(k)).map(([k, d]) => [k, d.filter((y) => persistent.get(k).some((x) => x.where === y.where))]).filter(([, d]) => d.length))
+          ? new Map([...found].filter(([k]) => persistent.has(k)).map(([k, d]) => [k, d.filter((y) => persistent.get(k).some((x) => x.where === y.where && x.idx === y.idx))]).filter(([, d]) => d.length))
           : found;
         if (!persistent.size) break;
         // Retries as configured; then one more pass if a difference is still only known by its hash.
