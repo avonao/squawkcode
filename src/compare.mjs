@@ -83,7 +83,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   if (cfg.reducedMotion) await c.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   const open = async () => {
     await gotoReady(c, base + page, cfg);
-    if (cfg.scrollThrough) await c.evaluate(`(async()=>{for(let y=0;y<document.body.scrollHeight;y+=600){window.scrollTo(0,y);await new Promise(r=>setTimeout(r,50));}window.scrollTo(0,0);})()`);
+    if (cfg.scrollThrough) await c.evaluate(`(async()=>{for(let y=0;y<(document.body?.scrollHeight??0);y+=600){window.scrollTo(0,y);await new Promise(r=>setTimeout(r,50));}window.scrollTo(0,0);})()`);
     await sleep(400);
   };
   await open();
@@ -98,13 +98,16 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   const hoverHere = cfg.hover.viewports ? cfg.hover.viewports.includes(vpName) : vpName !== 'mobile';
   if (cfg.hover && cfg.hover.max > 0 && hoverHere) {
     await open(); await setState(c, firstState);
+    // The same properties as the page captures: shared by both browsers, ignored ones and custom properties left out.
+    const ignore = cfg.ignoreProps.map((r) => new RegExp(r));
+    const hoverProps = JSON.stringify((cfg.props ?? []).filter((p) => !ignore.some((r) => r.test(p))).sort());
     const n = await c.evaluate(`${HOVER_TARGETS}().length`);
     const step = Math.max(1, Math.floor(n / cfg.hover.max));
     for (let i = 0, k = 0; i < n && k < cfg.hover.max; i += step, k++) {
       const pos = await c.evaluate(`(()=>{const e=${HOVER_TARGETS}()[${i}]; if(!e) return null; e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2};})()`);
       if (!pos) continue;
       await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pos.x, y: pos.y }); await sleep(180);
-      out.set(`${page}|${vpName}|hover:${i}`, await c.evaluate(`(()=>{const e=${HOVER_TARGETS}()[${i}]; const props=[...getComputedStyle(document.documentElement)].sort(); const list=[e,...e.querySelectorAll('*')].slice(0,${cfg.hover.perElement}); return {props, rows:list.map(x=>{const cs=getComputedStyle(x); return {t:x.tagName, p:x.tagName.toLowerCase()+(typeof x.className==='string'&&x.className?'.'+x.className.trim().split(/\\s+/).slice(0,3).join('.'):''), v:props.map(k=>cs.getPropertyValue(k)).join('|')};})};})()`));
+      out.set(`${page}|${vpName}|hover:${i}`, await c.evaluate(`(()=>{const e=${HOVER_TARGETS}()[${i}]; const props=${hoverProps}; const list=[e,...e.querySelectorAll('*')].slice(0,${cfg.hover.perElement}); return {props, rows:list.map(x=>{const cs=getComputedStyle(x); return {t:x.tagName, p:x.tagName.toLowerCase()+(typeof x.className==='string'&&x.className?'.'+x.className.trim().split(/\\s+/).slice(0,3).join('.'):''), v:props.map(k=>cs.getPropertyValue(k)).join('|')};})};})()`));
       await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
     }
   }
