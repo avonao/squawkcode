@@ -73,7 +73,10 @@ async function gotoReady(c, url, cfg) {
     }
   }
 }
-const setState = (c, cls) => c.evaluate(`(()=>{const l=document.documentElement.classList; for (const k of ${JSON.stringify(Object.values(ALLSTATE))}) k.split(' ').filter(Boolean).forEach(x=>l.remove(x)); '${cls}'.split(' ').filter(Boolean).forEach(x=>l.add(x)); document.getAnimations().forEach(a=>{try{a.cancel()}catch{}});})()`);
+// After the classes change, transitions are cancelled frame by frame until none is left: Chrome updates some elements'
+// style late (off-screen slides, content-visibility), so their transitions start after a single cancel and a capture
+// would catch them half way.
+const setState = (c, cls) => c.evaluate(`(async()=>{const l=document.documentElement.classList; for (const k of ${JSON.stringify(Object.values(ALLSTATE))}) k.split(' ').filter(Boolean).forEach(x=>l.remove(x)); '${cls}'.split(' ').filter(Boolean).forEach(x=>l.add(x)); document.getAnimations().forEach(a=>{try{a.cancel()}catch{}}); for (let i = 0; i < 30; i++) { await new Promise((r) => requestAnimationFrame(() => r())); const t = document.getAnimations().filter((a) => a instanceof CSSTransition); if (!t.length) break; t.forEach((a) => { try { a.cancel(); } catch {} }); }})()`);
 let ALLSTATE = {};
 
 async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
