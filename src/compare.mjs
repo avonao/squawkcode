@@ -26,10 +26,10 @@ const DEFAULTS = {
 };
 
 // A whole page's computed styles are tens of megabytes (2,600 elements × 760 properties), too much to move over CDP
-// for every state. The page sends one hash per element (and per ::before / ::after) of its values, with the ignored
+// for every state. The page sends one hash per element (and per pseudo-element) of its values, with the ignored
 // properties left out and its own origin written as H; `detail` lists the elements whose values it also sends, which
 // compareSites asks for once hashes have differed. `props` is the property list both browsers share (compareSites).
-const collect = (ignore, detail, props) => `(() => {
+export const collect = (ignore, detail, props) => `(() => {
   const ignore = ${JSON.stringify(ignore)}.map((r) => new RegExp(r));
   const want = new Set(${JSON.stringify(detail ?? [])});
   const props = (${JSON.stringify(props ?? null)} ?? [...getComputedStyle(document.documentElement)]).filter((p) => !ignore.some((r) => r.test(p))).sort();
@@ -48,9 +48,15 @@ const collect = (ignore, detail, props) => `(() => {
     const v = read(getComputedStyle(e));
     const r = { t: e.tagName, p: e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\\s+/).slice(0,3).join('.') : ''), h: h53(v) };
     if (want.has(i)) r.v = v;
-    for (const ps of ['::before','::after']) {
+    // Pseudo-elements: ::before/::after when they render, and the ones a reset styles where the element has them.
+    const pseudos = ['::before', '::after'];
+    if ((e.tagName === 'INPUT' || e.tagName === 'TEXTAREA') && e.hasAttribute('placeholder')) pseudos.push('::placeholder');
+    if (e.tagName === 'INPUT' && e.type === 'file') pseudos.push('::file-selector-button');
+    if (e.tagName === 'DIALOG' && e.open) pseudos.push('::backdrop');
+    if (getComputedStyle(e).display === 'list-item') pseudos.push('::marker');
+    for (const ps of pseudos) {
       const c = getComputedStyle(e, ps);
-      if (!c.content || c.content === 'none' || c.content === 'normal') continue;
+      if ((ps === '::before' || ps === '::after') && (!c.content || c.content === 'none' || c.content === 'normal')) continue;
       const pv = read(c);
       r[ps + '#'] = h53(pv);
       if (want.has(i)) r[ps] = pv;
@@ -137,7 +143,8 @@ function diffEntry(A, B, cfg, hostsA, hostsB) {
     if (ra.t !== rb.t) { diffs.push({ where: ra.p, detail: `tag ${ra.t} vs ${rb.t}` }); return; }
     // Hashed rows (whole-page captures): equal hashes are equal styles; a differing one is read in full on the next pass.
     if (ra.h !== undefined) {
-      for (const [hk, vk] of [['h', 'v'], ['::before#', '::before'], ['::after#', '::after']]) {
+      for (const hk of new Set([...Object.keys(ra), ...Object.keys(rb)].filter((k) => k === 'h' || k.endsWith('#')))) {
+        const vk = hk === 'h' ? 'v' : hk.slice(0, -1);
         if (ra[hk] === rb[hk]) continue;
         if (ra[hk] === undefined || rb[hk] === undefined) { diffs.push({ where: `${ra.p}${vk === 'v' ? '' : vk}`, detail: `${vk} exists on one side only`, idx: i, full: true }); continue; }
         if (ra[vk] === undefined || rb[vk] === undefined) { diffs.push({ where: `${ra.p}${vk === 'v' ? '' : vk}`, detail: 'computed style differs', idx: i }); continue; }
