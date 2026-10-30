@@ -18,6 +18,8 @@ const DEFAULTS = {
   readyWhen: null,                              // expression evaluated in the page after it settles; capture waits until it is true
                                                 // (e.g. an iframe's ready class), at most readyTimeoutMs
   readyTimeoutMs: 20000,
+  beforeCapture: null,                          // expression evaluated before every capture, to pin what changes on a timer
+                                                // (e.g. reset a carousel that advances every few seconds)
   retries: 1,                                   // pages with differences are captured again and only persistent ones count
   maxReport: 15,
   chrome: null,
@@ -65,12 +67,14 @@ async function gotoReady(c, url, cfg) {
   await c.send('Page.navigate', { url });
   await sleep(cfg.settleMs);
   for (let i = 0; i < 30; i++) { if (await c.evaluate('document.readyState') === 'complete') break; await sleep(250); }
-  // A page that finishes after load (an iframe, a client fetch) is captured once it says so; the two sides can be far
-  // apart in time when one server is busier.
-  if (cfg.readyWhen) {
-    for (const end = Date.now() + cfg.readyTimeoutMs; Date.now() < end; await sleep(250)) {
-      if (await c.evaluate(`!!(${cfg.readyWhen})`)) break;
-    }
+}
+
+// A page that finishes after load (an iframe, a client fetch) is captured once it says so; the two sides can be far
+// apart in time when one server is busier. Called after the scroll pass, which is what starts lazy iframes.
+async function waitReady(c, cfg) {
+  if (!cfg.readyWhen) return;
+  for (const end = Date.now() + cfg.readyTimeoutMs; Date.now() < end; await sleep(250)) {
+    if (await c.evaluate(`!!(${cfg.readyWhen})`)) return;
   }
 }
 // After the classes change, transitions are cancelled frame by frame until none is left: Chrome updates some elements'
@@ -87,13 +91,15 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
   const open = async () => {
     await gotoReady(c, base + page, cfg);
     if (cfg.scrollThrough) await c.evaluate(`(async()=>{for(let y=0;y<(document.body?.scrollHeight??0);y+=600){window.scrollTo(0,y);await new Promise(r=>setTimeout(r,50));}window.scrollTo(0,0);})()`);
+    await waitReady(c, cfg);
     await sleep(400);
   };
   await open();
-  for (const [sn, cls] of Object.entries(cfg.states)) { await setState(c, cls); await sleep(250); const key = `${page}|${vpName}|${sn}`; out.set(key, await c.evaluate(COLLECT(key))); }
+  const pin = () => (cfg.beforeCapture ? c.evaluate(`void (${cfg.beforeCapture})`) : null);
+  for (const [sn, cls] of Object.entries(cfg.states)) { await pin(); await setState(c, cls); await sleep(250); const key = `${page}|${vpName}|${sn}`; out.set(key, await c.evaluate(COLLECT(key))); }
   const firstState = Object.values(cfg.states)[0] ?? '';
   for (const a of cfg.actions) {
-    await open(); await setState(c, firstState);
+    await open(); await pin(); await setState(c, firstState);
     try { await c.evaluate(a.eval); } catch (e) { out.set(`${page}|${vpName}|action:${a.name}`, { props: [], rows: [], error: e.message }); continue; }
     const key = `${page}|${vpName}|action:${a.name}`;
     await sleep(500); out.set(key, await c.evaluate(COLLECT(key)));
@@ -109,6 +115,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, detail = new Map()) {
     for (let i = 0, k = 0; i < n && k < cfg.hover.max; i += step, k++) {
       const pos = await c.evaluate(`(()=>{const e=${HOVER_TARGETS}()[${i}]; if(!e) return null; e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2};})()`);
       if (!pos) continue;
+      await pin();
       await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pos.x, y: pos.y }); await sleep(180);
       out.set(`${page}|${vpName}|hover:${i}`, await c.evaluate(`(()=>{const e=${HOVER_TARGETS}()[${i}]; const props=${hoverProps}; const list=[e,...e.querySelectorAll('*')].slice(0,${cfg.hover.perElement}); return {props, rows:list.map(x=>{const cs=getComputedStyle(x); return {t:x.tagName, p:x.tagName.toLowerCase()+(typeof x.className==='string'&&x.className?'.'+x.className.trim().split(/\\s+/).slice(0,3).join('.'):''), v:props.map(k=>cs.getPropertyValue(k)).join('|')};})};})()`));
       await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
