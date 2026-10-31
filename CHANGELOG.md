@@ -12,7 +12,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `squawkcode compare`: headless-Chrome computed-style diff of two running copies of a site, per page, viewport, html-class state, scripted action and hover; one hash per element and full values only for differing elements; colour tolerance in lab ΔE; pseudo-elements; `hover.selector`; differences count only when they persist on a retry.
 - `squawkcode gate`: transform, build both copies, serve both and compare; exit 0 only when identical.
 - `squawkcode init`: a starter `squawkcode.config.json`.
-
-### Changed
-
-- Renamed from classhash. The `classhash` command, `classhash.config.json` and `CLASSHASH_CHROME` keep working for now. The map file is `squawkcode-map.json` and the default hash seed is `squawkcode`, so class names hashed by the old default differ.

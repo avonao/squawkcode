@@ -10,11 +10,10 @@
   },
   "bugs": "https://github.com/avonao/squawkcode/issues",
   "homepage": "https://github.com/avonao/squawkcode#readme",
-  "keywords": ["css", "class-names", "visual-regression", "computed-style", "chrome", "migration"],
+  "keywords": ["css", "class-names", "hash", "visual-regression", "computed-style", "chrome", "migration"],
   "type": "module",
   "bin": {
-    "squawkcode": "bin/squawkcode.mjs",
-    "classhash": "bin/classhash.mjs"
+    "squawkcode": "bin/squawkcode.mjs"
   },
   "files": ["bin", "src", "squawkcode.config.example.json", "README.md", "CHANGELOG.md", "LICENSE"],
   "engines": { "node": ">=22" },
