@@ -178,7 +178,7 @@ function valueDiffs(props, va, vb, skipIdx, cfg) {
 }
 
 export async function compareSites(userCfg, { a, b, out } = {}) {
-  if (!a || !b) throw new Error('classhash compare needs --a and --b (base URLs of the two copies)');
+  if (!a || !b) throw new Error('squawkcode compare needs --a and --b (base URLs of the two copies)');
   const cfg = { ...DEFAULTS, ...userCfg, hover: { ...DEFAULTS.hover, ...(userCfg.hover || {}) } };
   ALLSTATE = cfg.states;
   // One browser per side, each with its own profile: A and B load in parallel and share no cookies or storage.
@@ -190,7 +190,7 @@ export async function compareSites(userCfg, { a, b, out } = {}) {
     const [la, lb] = await Promise.all([ca, cb].map((c) => c.evaluate('[...getComputedStyle(document.documentElement)].filter((p) => !p.startsWith("--"))')));
     cfg.props = la.filter((p) => lb.includes(p));
     const odd = [...la.filter((p) => !lb.includes(p)).map((p) => `${p} (A only)`), ...lb.filter((p) => !la.includes(p)).map((p) => `${p} (B only)`)];
-    if (odd.length) console.warn(`classhash: the two browsers support different properties, left out of the comparison: ${odd.join(', ')}`);
+    if (odd.length) console.warn(`squawkcode: the two browsers support different properties, left out of the comparison: ${odd.join(', ')}`);
     for (const page of cfg.pages) for (const [vpName, vp] of Object.entries(cfg.viewports)) {
       let persistent = null;
       let detail = new Map(); // key -> element indices to read in full

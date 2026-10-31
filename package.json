@@ -1,12 +1,25 @@
 {
-  "name": "classhash",
+  "name": "squawkcode",
   "version": "0.1.0",
-  "description": "Hash CSS class names in a copy of a site's source before deploy, and prove the look did not change.",
+  "description": "SquawkCode: hash CSS class names in a copy of a site before deploy, and prove with headless Chrome that the look did not change.",
+  "license": "MIT",
+  "author": "Avonao",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avonao/squawkcode.git"
+  },
+  "bugs": "https://github.com/avonao/squawkcode/issues",
+  "homepage": "https://github.com/avonao/squawkcode#readme",
+  "keywords": ["css", "class-names", "visual-regression", "computed-style", "chrome", "migration"],
   "type": "module",
-  "bin": { "classhash": "bin/classhash.mjs" },
+  "bin": {
+    "squawkcode": "bin/squawkcode.mjs",
+    "classhash": "bin/classhash.mjs"
+  },
+  "files": ["bin", "src", "squawkcode.config.example.json", "README.md", "CHANGELOG.md", "LICENSE"],
   "engines": { "node": ">=22" },
   "scripts": { "test": "node --test test/*.test.mjs" },
   "peerDependencies": { "postcss": ">=8", "typescript": ">=5" },
-  "license": "UNLICENSED",
+  "devDependencies": { "postcss": "^8.5.6", "typescript": "^5.9.3" },
   "private": true
 }

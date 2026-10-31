@@ -13,7 +13,7 @@ const inside = (file, dirs) => dirs.some((d) => file === d || file.startsWith(d 
 // Rewrites the tree at `root` in place. `moduleDir` is where postcss/typescript are resolved from (the original project).
 export function transformTree(root, cfg, { moduleDir = root, log = () => {} } = {}) {
   const srcDirs = cfg.srcDirs.map((d) => path.join(root, d));
-  if (!srcDirs.length) throw new Error('classhash: config.srcDirs is empty — say which directories hold the site\'s CSS and components');
+  if (!srcDirs.length) throw new Error('squawkcode: config.srcDirs is empty — say which directories hold the site\'s CSS and components');
   const exclude = cfg.copyExclude;
   const files = srcDirs.flatMap((d) => walkFiles(d, { exclude }));
   const css = files.filter((f) => f.endsWith('.css'));
