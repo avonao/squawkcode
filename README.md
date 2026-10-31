@@ -41,6 +41,7 @@ SquawkCode is a sister product of [Purser CSS](https://github.com/avonao/purser)
 - [Configuration](#configuration)
 - [Source layout](#source-layout)
 - [Works with Purser and Hypdriv](#works-with-purser-and-hypdriv)
+- [Why the name](#why-the-name)
 - [Preview status](#preview-status)
 - [Documentation](#documentation)
 - [Develop from source](#develop-from-source)
@@ -181,8 +182,6 @@ Every command takes `--project <dir>` (default the current directory) and `--con
 | `squawkcode compare` | Headless-Chrome computed-style diff of two running copies: `--a <baseUrl> --b <baseUrl>`, `--out <file>` for the JSON report |
 | `squawkcode gate` | Transform, build both copies, serve both and compare; exit 0 only when identical; the hashed tree is left for deploy |
 
-The earlier name of this tool, `classhash`, still runs the same command.
-
 ## Configuration
 
 Keys of `squawkcode.config.json` (defaults in [`src/config.mjs`](src/config.mjs)):
@@ -243,6 +242,12 @@ Keys of `squawkcode.config.json` (defaults in [`src/config.mjs`](src/config.mjs)
 
 - **[Purser CSS](https://github.com/avonao/purser)** moves a site's styles into one deterministic atomic stylesheet in which no declaration can be overridden. Moving an existing site onto Purser one component at a time is exactly the kind of change `squawkcode compare` proves: serve the site before the move on one port and after it on another, and every element's computed style, in every state and viewport, is compared.
 - **[Hypdriv](https://github.com/avonao/hypdriv)** audits a running deployment (headers, CSP, cache, HTTPS, zero CSS overrides). SquawkCode answers a different question, whether a change altered the look, and runs before deploy.
+
+## Why the name
+
+A *squawk code* is the four-digit code that air traffic control assigns to an aircraft ("squawk 4271") and that the pilot sets on the aircraft's transponder. From then on, every radar sweep makes the transponder answer with that short code, and the controller's screen shows it beside the aircraft: a few digits stand in for an identity that would otherwise have to be read out and checked. The word itself dates back to the Second World War, to the identification-friend-or-foe radio whose British code name was "Parrot": a transponder *squawks* its answer back.
+
+SquawkCode is named after it, twice over. Hashing replaces every long, readable class name with a short code that stands in for it. And the comparison is the radar sweep: both copies of the site answer for every element, and any element whose answer does not match is flagged.
 
 ## Preview status
 

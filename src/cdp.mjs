@@ -7,7 +7,6 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const CHROME_CANDIDATES = [
   process.env.SQUAWKCODE_CHROME,
-  process.env.CLASSHASH_CHROME, // the name this tool had before it became SquawkCode
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',

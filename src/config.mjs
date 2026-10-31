@@ -22,9 +22,7 @@ export const DEFAULTS = {
 };
 
 export function loadConfig(projectDir, explicit) {
-  const dir = path.resolve(projectDir);
-  // classhash.config.json is the name this tool's config had before it became SquawkCode.
-  const file = explicit ? path.resolve(explicit) : [path.join(dir, 'squawkcode.config.json'), path.join(dir, 'classhash.config.json')].find((f) => fs.existsSync(f)) ?? path.join(dir, 'squawkcode.config.json');
+  const file = explicit ? path.resolve(explicit) : path.join(path.resolve(projectDir), 'squawkcode.config.json');
   const user = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
   const cfg = { ...DEFAULTS, ...user, build: { ...DEFAULTS.build, ...user.build }, serve: { ...DEFAULTS.serve, ...user.serve } };
   cfg._file = fs.existsSync(file) ? file : null;
