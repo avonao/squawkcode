@@ -7,7 +7,8 @@ import { transformTree } from '../src/transform.mjs';
 import { mapSelector } from '../src/selector.mjs';
 import { DEFAULTS } from '../src/config.mjs';
 
-const WEB = '/Users/apple.m5.pro/Workspace/Entpoind Workspace/web'; // where postcss and typescript are resolved from in tests
+// Where postcss and typescript are resolved from in tests: this repository's dev dependencies, or the project that SQUAWKCODE_TEST_PROJECT names.
+const WEB = process.env.SQUAWKCODE_TEST_PROJECT ?? path.resolve(import.meta.dirname, '..');
 
 function site(files, cfg = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ch-'));

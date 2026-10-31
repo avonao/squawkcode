@@ -9,7 +9,7 @@ export function loadFrom(projectDir, name) {
   if (cache.has(key)) return cache.get(key);
   const req = createRequire(path.join(path.resolve(projectDir), 'package.json'));
   let mod;
-  try { mod = req(name); } catch (e) { throw new Error(`classhash: cannot load "${name}" from ${projectDir} (is it installed there?): ${e.message}`); }
+  try { mod = req(name); } catch (e) { throw new Error(`squawkcode: cannot load "${name}" from ${projectDir} (is it installed there?): ${e.message}`); }
   cache.set(key, mod);
   return mod;
 }

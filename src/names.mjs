@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 // Deterministic, collision-checked short names: same seed + same class => same hash, so browser caches survive a redeploy.
-export function makeNamer(seed = 'classhash', prefix = 'h') {
+export function makeNamer(seed = 'squawkcode', prefix = 'h') {
   const used = new Map(); // hashed -> original
   return function nameFor(orig) {
     const digest = createHash('sha256').update(`${seed}:${orig}`).digest();
@@ -12,6 +12,6 @@ export function makeNamer(seed = 'classhash', prefix = 'h') {
       const prior = used.get(s);
       if (prior === undefined || prior === orig) { used.set(s, orig); return s; }
     }
-    throw new Error(`classhash: could not find a collision-free name for ${orig}`);
+    throw new Error(`squawkcode: could not find a collision-free name for ${orig}`);
   };
 }

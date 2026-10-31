@@ -6,7 +6,8 @@ import path from 'node:path';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const CHROME_CANDIDATES = [
-  process.env.CLASSHASH_CHROME,
+  process.env.SQUAWKCODE_CHROME,
+  process.env.CLASSHASH_CHROME, // the name this tool had before it became SquawkCode
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
@@ -21,9 +22,9 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {
 
 export async function launchChrome(explicit) {
   const bin = [explicit, ...CHROME_CANDIDATES].filter(Boolean).find((p) => fs.existsSync(p));
-  if (!bin) throw new Error('classhash: no Chrome found — set CLASSHASH_CHROME or config.compare.chrome');
+  if (!bin) throw new Error('squawkcode: no Chrome found — set SQUAWKCODE_CHROME or config.compare.chrome');
   const port = 9300 + Math.floor(Math.random() * 600);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'classhash-chrome-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'squawkcode-chrome-'));
   // Two instances capture side by side (compare runs A and B at once): keep a page that is not in front at full speed.
   const quiet = ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'];
   // No field trials and no seed or component downloads, so every launch has the same web platform features.

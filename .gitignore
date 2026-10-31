@@ -1,0 +1,12 @@
+node_modules
+package-lock.json
+
+# Output of a run
+squawkcode-map.json
+.squawkcode/
+
+# OS and editor files
+.DS_Store
+*.log
+.idea/
+.vscode/

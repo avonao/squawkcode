@@ -23,7 +23,7 @@ async function serve(cmd, cwd, port, env, readyPath, timeoutSec) {
 
 // Two copies of the project: plain (built as-is) and hashed. Same build, same server, compared in Chrome.
 export async function gate(project, cfg) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'classhash-gate-'));
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'squawkcode-gate-'));
   const plain = path.join(base, 'plain'), hashed = path.join(base, 'hashed');
   const exclude = cfg.copyExclude.filter((x) => x !== 'node_modules');
   for (const d of [plain, hashed]) {
@@ -33,7 +33,7 @@ export async function gate(project, cfg) {
   }
   const r = transformTree(hashed, cfg, { moduleDir: project, log: (m) => console.log(m) });
   fs.writeFileSync(path.join(hashed, cfg.mapFile), JSON.stringify({ seed: cfg.seed, map: Object.fromEntries(r.map), kept: Object.fromEntries(r.keep) }, null, 2));
-  if (r.issues.length) { console.error(`\n${r.issues.length} thing(s) classhash will not guess at:\n${formatIssues(r.issues)}\n`); return 1; }
+  if (r.issues.length) { console.error(`\n${r.issues.length} thing(s) squawkcode will not guess at:\n${formatIssues(r.issues)}\n`); return 1; }
   console.log(`hashed ${r.map.size} classes in ${r.changedFiles} files`);
   await run(cfg.build.cmd, plain, cfg.build.env, 'plain build');
   await run(cfg.build.cmd, hashed, cfg.build.env, 'hashed build');
