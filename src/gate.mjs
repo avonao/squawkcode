@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,7 +29,7 @@ export async function gate(project, cfg) {
   for (const d of [plain, hashed]) {
     copyProject(project, d, exclude.concat('node_modules'));
     const nm = path.join(project, 'node_modules');
-    if (fs.existsSync(nm)) { try { execSync(`cp -cR "${nm}" "${d}/node_modules"`, { stdio: 'ignore' }); } catch { fs.symlinkSync(nm, path.join(d, 'node_modules')); } }
+    if (fs.existsSync(nm)) { try { execFileSync("cp", ["-cR", nm, path.join(d, "node_modules")], { stdio: "ignore" }); } catch { fs.symlinkSync(nm, path.join(d, 'node_modules')); } }
   }
   const r = transformTree(hashed, cfg, { moduleDir: project, log: (m) => console.log(m) });
   fs.writeFileSync(path.join(hashed, cfg.mapFile), JSON.stringify({ seed: cfg.seed, map: Object.fromEntries(r.map), kept: Object.fromEntries(r.keep) }, null, 2));
