@@ -1,7 +1,7 @@
 {
   "name": "squawkcode",
-  "version": "0.1.0",
-  "description": "SquawkCode: hash CSS class names in a copy of a site before deploy, and prove with headless Chrome that the look did not change.",
+  "version": "0.2.0",
+  "description": "SquawkCode: rename CSS class names to hashes or to the shortest names in a copy of a site before deploy, and prove with headless Chrome that the look did not change.",
   "license": "MIT",
   "author": "Avonao",
   "repository": {
@@ -10,15 +10,37 @@
   },
   "bugs": "https://github.com/avonao/squawkcode/issues",
   "homepage": "https://github.com/avonao/squawkcode#readme",
-  "keywords": ["css", "class-names", "hash", "visual-regression", "computed-style", "chrome", "migration"],
+  "keywords": [
+    "css",
+    "class-names",
+    "hash",
+    "visual-regression",
+    "computed-style",
+    "chrome",
+    "migration"
+  ],
   "type": "module",
   "bin": {
     "squawkcode": "bin/squawkcode.mjs"
   },
-  "files": ["bin", "src", "squawkcode.config.example.json", "README.md", "CHANGELOG.md", "LICENSE"],
-  "engines": { "node": ">=22" },
-  "scripts": { "test": "node --test test/*.test.mjs" },
-  "peerDependencies": { "postcss": ">=8", "typescript": ">=5" },
-  "devDependencies": { "postcss": "^8.5.6", "typescript": "^5.9.3" },
+  "files": [
+    "bin",
+    "src",
+    "squawkcode.config.example.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "bench": "node benchmarks/run.mjs --json benchmarks/results/site.json && node benchmarks/report.mjs"
+  },
+  "dependencies": {
+    "postcss": "^8.5.6",
+    "typescript": ">=5.0.0 <7.0.0"
+  },
   "private": true
 }
