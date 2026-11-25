@@ -230,6 +230,11 @@ if (args.json) {
   const file = path.resolve(args.json);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   // keep the sections that were not run this time
-  const before = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  let before = {};
+  try {
+    before = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    // no result file yet
+  }
   fs.writeFileSync(file, `${JSON.stringify({ ...before, ...report }, null, 2)}\n`);
 }

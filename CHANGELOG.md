@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `postcss` and `typescript` are dependencies. The project's copies are still used first; SquawkCode's own are used for a project that has none, or whose TypeScript has no parser API (TypeScript 7).
 - Each stylesheet is parsed once, source files are parsed without parent links, and a source file that names no renamed class is not parsed at all.
 - Chrome is driven over a pipe, not over a port: nothing listens anywhere, and any number of browsers can start at once.
+- What the comparison tells the page (class lists, selectors, property names) is passed to page functions as arguments, never pasted into code.
 
 ## [0.1.0] - Unreleased
 

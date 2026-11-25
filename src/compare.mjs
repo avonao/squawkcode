@@ -38,10 +38,6 @@ export const DEFAULTS = {
   chrome: null,
 };
 
-// A whole page's computed styles are tens of megabytes (2,600 elements × 760 properties), too much to move over CDP
-// for every state. The page sends one hash per element (and per pseudo-element) of its values, with the ignored
-// properties left out and its own origin written as H; `detail` lists the elements whose values it also sends, which
-// compareSites asks for once hashes have differed. `props` is the property list both browsers share (compareSites).
 // A 53-bit hash of a string, for the page (cyrb53).
 const H53 = `const h53 = (str) => {
     let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
@@ -51,10 +47,15 @@ const H53 = `const h53 = (str) => {
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   };`;
 
-export const collect = (ignore, detail, props) => `(() => {
-  const ignore = ${JSON.stringify(ignore)}.map((r) => new RegExp(r));
-  const want = new Set(${JSON.stringify(detail ?? [])});
-  const props = (${JSON.stringify(props ?? null)} ?? [...getComputedStyle(document.documentElement)]).filter((p) => !ignore.some((r) => r.test(p))).sort();
+// A whole page's computed styles are tens of megabytes (2,600 elements × 760 properties), too much to move over CDP
+// for every state. The page sends one hash per element (and per pseudo-element) of its values, with the ignored
+// properties left out and its own origin written as H; `detail` lists the elements whose values it also sends, which
+// compareSites asks for once hashes have differed. `props` is the property list both browsers share (compareSites).
+// A function for the page (see `call` in cdp.mjs): its data are its arguments.
+export const COLLECT = `(ignoreList, detail, propList) => {
+  const ignore = ignoreList.map((r) => new RegExp(r));
+  const want = new Set(detail ?? []);
+  const props = (propList ?? [...getComputedStyle(document.documentElement)]).filter((p) => !ignore.some((r) => r.test(p))).sort();
   const skip = new Set(['SCRIPT','STYLE','LINK','META','TITLE','HEAD','NOSCRIPT']);
   // Every element, in document order, through open shadow roots too (a custom element's parts are styled like any other).
   const deep = (root) => { const out = []; for (const e of root.querySelectorAll('*')) { out.push(e); if (e.shadowRoot) out.push(...deep(e.shadowRoot)); } return out; };
@@ -82,11 +83,17 @@ export const collect = (ignore, detail, props) => `(() => {
     return r;
   };
   return { props, rows: els.map(row) };
-})()`;
+}`;
 
 const HOVER_SELECTOR = 'a[href], button, summary, [role="button"], input, select';
-const hoverTargets = (sel) => `(() => [...document.querySelectorAll(${JSON.stringify(sel)})]
-  .filter(e => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 2 && r.height > 2 && cs.visibility !== 'hidden' && cs.display !== 'none'; }))`;
+// The elements to hover, found once and kept by the page: the element under the pointer and the element read are the
+// same one, whatever the pointer changes. Returns how many there are.
+const HOVER_TARGETS = `(selector) => {
+  window.__squawkHover = [...document.querySelectorAll(selector)].filter((e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 2 && r.height > 2 && cs.visibility !== 'hidden' && cs.display !== 'none'; });
+  return window.__squawkHover.length;
+}`;
+// Bring the i-th of them into view; where its middle is.
+const HOVER_POSITION = `(i) => { const e = window.__squawkHover[i]; if (!e || !e.isConnected) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }`;
 
 // What the page does on its own is watched from the moment it has loaded: `last` is when the document last changed
 // (a page is captured when that is quietMs ago), `n` counts the changes that were not made by a state set here
@@ -141,9 +148,7 @@ async function setState(c, cfg, value) {
   const features = Object.entries(state.media ?? {}).map(([name, v]) => ({ name, value: String(v) }));
   if (cfg.reducedMotion && !features.some((f) => f.name === 'prefers-reduced-motion')) features.push({ name: 'prefers-reduced-motion', value: 'reduce' });
   await c.send('Emulation.setEmulatedMedia', { media: state.type, features });
-  // The observer's callback runs before the line after the first await: the class changes made here are not counted
-  // as the page's own.
-  await c.evaluate(`(async()=>{const q=window.__squawkQuiet; if(q) q.own=true; const l=document.documentElement.classList; for (const k of ${JSON.stringify(all)}) l.remove(k); for (const k of ${JSON.stringify(state.class.split(' ').filter(Boolean))}) l.add(k); await Promise.resolve(); if(q) q.own=false; document.getAnimations().forEach(a=>{try{a.cancel()}catch{}}); ${NO_TRANSITIONS}})()`);
+  await c.call(SET_CLASSES, all, state.class.split(' ').filter(Boolean));
 }
 
 // Wait a frame and cancel the transitions it started, until a frame starts none: every property is then at the value
@@ -151,12 +156,20 @@ async function setState(c, cfg, value) {
 // a capture never reads a value half way through a transition, which would differ between the two sides by timing.
 const NO_TRANSITIONS = `for (let i = 0; i < 30; i++) { await new Promise((r) => requestAnimationFrame(() => r())); const t = document.getAnimations().filter((a) => a instanceof CSSTransition); if (!t.length) break; t.forEach((a) => { try { a.cancel(); } catch {} }); }`;
 const endTransitions = (c) => c.evaluate(`(async()=>{${NO_TRANSITIONS}})()`);
+// Take the classes of every state off the root element and put this state's on. The observer's callback runs before
+// the line after the first await: the class changes made here are not counted as the page's own.
+const SET_CLASSES = `async (all, classes) => { const q = window.__squawkQuiet; if (q) q.own = true; const l = document.documentElement.classList; for (const k of all) l.remove(k); for (const k of classes) l.add(k); await Promise.resolve(); if (q) q.own = false; document.getAnimations().forEach((a) => { try { a.cancel(); } catch {} }); ${NO_TRANSITIONS} }`;
 
 // One element, its ancestors (a hovered or focused element changes them too: `.card:hover`, `:focus-within`) and its
 // first descendants, read once no transition is running: a hash of each one's computed values, like a page capture,
-// and the values themselves for the elements in `detail`. `pick` is an expression for the element; the result is a
-// promise.
-const around = (pick, props, perElement, detail) => `(async()=>{${NO_TRANSITIONS} const el=${pick}; if(!el) return null; ${H53} const want=new Set(${JSON.stringify(detail ?? [])}); const host=location.origin; const props=${props}; const up=[]; for(let a=el.parentElement; a && up.length<6; a=a.parentElement) up.push(a); const list=[el,...up,...el.querySelectorAll('*')].slice(0,${perElement}+7); return {props, rows:list.map((x,i)=>{const cs=getComputedStyle(x); const v=props.map(k=>cs.getPropertyValue(k)).join('|').split(host).join('H'); const r={t:x.tagName, p:x.tagName.toLowerCase()+(typeof x.className==='string'&&x.className?'.'+x.className.trim().split(/\\s+/).slice(0,3).join('.'):''), h:h53(v)}; if(want.has(i)) r.v=v; return r;})};})()`;
+// and the values themselves for the elements in `detail`. Statements for a page function that has `el`, `props`,
+// `perElement` and `detail`.
+const AROUND = `${NO_TRANSITIONS} ${H53} const want = new Set(detail ?? []); const host = location.origin; const up = []; for (let a = el.parentElement; a && up.length < 6; a = a.parentElement) up.push(a); const list = [el, ...up, ...el.querySelectorAll('*')].slice(0, perElement + 7); return { props, rows: list.map((x, i) => { const cs = getComputedStyle(x); const v = props.map((k) => cs.getPropertyValue(k)).join('|').split(host).join('H'); const r = { t: x.tagName, p: x.tagName.toLowerCase() + (typeof x.className === 'string' && x.className ? '.' + x.className.trim().split(/\\s+/).slice(0, 3).join('.') : ''), h: h53(v) }; if (want.has(i)) r.v = v; return r; }) };`;
+// What the i-th hovered element looks like.
+const AROUND_HOVERED = `async (i, props, perElement, detail) => { const el = window.__squawkHover[i]; if (!el) return null; ${AROUND} }`;
+// What the focused element looks like. 0: no element has the focus; -1: it came round to an element it was on before;
+// 1: an element whose capture was not asked for.
+const AROUND_FOCUSED = `async (wanted, props, perElement, detail) => { const el = document.activeElement; if (!el || el === document.body || el === document.documentElement) return 0; if (window.__squawkFocused.has(el)) return -1; window.__squawkFocused.add(el); if (!wanted) return 1; ${AROUND} }`;
 
 /**
  * Every capture of one page at one viewport: key -> { props, rows }.
@@ -169,7 +182,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, { detail = new Map(),
   const keyOf = (part) => `${page}|${vpName}|${part}`;
   const want = (part) => !only || only.has(keyOf(part));
   const wantAny = (prefix) => !only || [...only].some((k) => k.startsWith(keyOf(prefix)));
-  const COLLECT = (key) => collect(cfg.ignoreProps, detail.get(key), cfg.props);
+  const collect = (key) => c.call(COLLECT, cfg.ignoreProps, detail.get(key) ?? [], cfg.props ?? null);
   await c.send('Emulation.setDeviceMetricsOverride', { width: vp[0], height: vp[1], deviceScaleFactor: 1, mobile: !!vp[2] });
   const first = Object.values(cfg.states)[0] ?? '';
   await setStateMedia(c, cfg, first);
@@ -189,11 +202,11 @@ async function capturePage(c, base, page, vpName, vp, cfg, { detail = new Map(),
   const states = Object.entries(cfg.states).filter(([sn]) => want(sn));
   if (states.length) {
     await open();
-    for (const [sn, value] of states) { await pin(); await setState(c, cfg, value); await sleep(careful ? 250 : 80); const key = keyOf(sn); out.set(key, await c.evaluate(COLLECT(key))); }
+    for (const [sn, value] of states) { await pin(); await setState(c, cfg, value); await sleep(careful ? 250 : 80); const key = keyOf(sn); out.set(key, await collect(key)); }
   }
   // The same properties as the page captures: shared by both browsers, ignored ones and custom properties left out.
   const ignore = cfg.ignoreProps.map((r) => new RegExp(r));
-  const someProps = JSON.stringify((cfg.props ?? []).filter((p) => !ignore.some((r) => r.test(p))).sort());
+  const someProps = (cfg.props ?? []).filter((p) => !ignore.some((r) => r.test(p))).sort();
   const here = (part) => (part.viewports ? part.viewports.includes(vpName) : vpName !== 'mobile');
   if (cfg.focus && cfg.focus.max > 0 && here(cfg.focus) && wantAny('focus:')) {
     // The keyboard's way through the page: Tab, and what the focused element (and what contains it) looks like.
@@ -209,8 +222,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, { detail = new Map(),
       await pin();
       await Promise.all(['keyDown', 'keyUp'].map((type) => c.send('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 })));
       if (careful) await sleep(180);
-      // 0: no element has the focus; -1: it came round to an element it was on before; 1: an element not asked for
-      const rows = await c.evaluate(`(async()=>{const e=document.activeElement; if(!e||e===document.body||e===document.documentElement) return 0; if(window.__squawkFocused.has(e)) return -1; window.__squawkFocused.add(e); return ${want(`focus:${taken}`) ? `await ${around('e', someProps, cfg.focus.perElement, detail.get(keyOf(`focus:${taken}`)))}` : '1'};})()`);
+      const rows = await c.call(AROUND_FOCUSED, want(`focus:${taken}`), someProps, cfg.focus.perElement, detail.get(keyOf(`focus:${taken}`)) ?? []);
       if (rows === -1) break;
       if (rows === 0) { if (++misses > 2) break; continue; } // three in a row: the focus has left the page
       misses = 0;
@@ -221,18 +233,16 @@ async function capturePage(c, base, page, vpName, vp, cfg, { detail = new Map(),
   }
   if (cfg.hover && cfg.hover.max > 0 && here(cfg.hover) && wantAny('hover:')) {
     await untouched(); await setState(c, cfg, first);
-    // The elements to hover are found once and kept by the page: the element under the pointer and the element read
-    // are the same one, whatever the pointer changes.
-    const n = await c.evaluate(`(() => { window.__squawkHover = ${hoverTargets(cfg.hover.selector ?? HOVER_SELECTOR)}(); return window.__squawkHover.length; })()`);
+    const n = await c.call(HOVER_TARGETS, cfg.hover.selector ?? HOVER_SELECTOR);
     const step = Math.max(1, Math.floor(n / cfg.hover.max));
     for (let i = 0, k = 0; i < n && k < cfg.hover.max; i += step, k++) {
       if (!want(`hover:${i}`)) continue;
-      const pos = await c.evaluate(`(()=>{const e=window.__squawkHover[${i}]; if(!e||!e.isConnected) return null; e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2};})()`);
+      const pos = await c.call(HOVER_POSITION, i);
       if (!pos) continue;
       await pin();
       await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pos.x, y: pos.y });
       if (careful) await sleep(180);
-      const rows = await c.evaluate(around(`window.__squawkHover[${i}]`, someProps, cfg.hover.perElement, detail.get(keyOf(`hover:${i}`))));
+      const rows = await c.call(AROUND_HOVERED, i, someProps, cfg.hover.perElement, detail.get(keyOf(`hover:${i}`)) ?? []);
       if (rows) out.set(keyOf(`hover:${i}`), rows);
     }
     await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
@@ -243,7 +253,7 @@ async function capturePage(c, base, page, vpName, vp, cfg, { detail = new Map(),
     await open(); await pin(); await setState(c, cfg, first);
     const key = keyOf(`action:${a.name}`);
     try { await c.evaluate(a.eval); } catch (e) { out.set(key, { props: [], rows: [], error: e.message }); continue; }
-    await sleep(careful ? 500 : 150); await endTransitions(c); out.set(key, await c.evaluate(COLLECT(key)));
+    await sleep(careful ? 500 : 150); await endTransitions(c); out.set(key, await collect(key));
   }
   return out;
 }

@@ -82,6 +82,21 @@ export async function launchChrome(explicit) {
     return r.result.value;
   };
   await send('Page.enable');
+  // The context page code runs in: the main frame's own, new after every navigation. `call` runs a function there
+  // with values as its arguments, so data is never pasted into code.
+  const { frameTree } = await send('Page.getFrameTree');
+  let context = null;
+  on('Runtime.executionContextCreated', ({ context: c }) => { if (c.auxData?.isDefault && c.auxData.frameId === frameTree.frame.id) context = c.id; });
+  on('Runtime.executionContextDestroyed', ({ executionContextId }) => { if (executionContextId === context) context = null; });
+  on('Runtime.executionContextsCleared', () => { context = null; });
+  await send('Runtime.enable');
+  const call = async (fn, ...args) => {
+    for (let i = 0; context === null && i < 500; i++) await sleep(10); // between two documents
+    if (context === null) throw new Error('squawkcode: the page has no document to run in');
+    const r = await send('Runtime.callFunctionOn', { functionDeclaration: String(fn), executionContextId: context, arguments: args.map((value) => (value === undefined ? {} : { value })), awaitPromise: true, returnByValue: true });
+    if (r.exceptionDetails) throw new Error(`page script failed: ${JSON.stringify(r.exceptionDetails).slice(0, 300)}`);
+    return r.result.value;
+  };
   // Which requests are under way, and when the network last did anything: what "the page has settled" is read from.
   // Streams that never end (server-sent events, sockets) and beacons are not waited for.
   const network = { open: new Set(), last: Date.now(), reset() { this.open.clear(); this.last = Date.now(); }, idleFor() { return this.open.size ? 0 : Date.now() - this.last; } };
@@ -90,5 +105,5 @@ export async function launchChrome(explicit) {
   for (const done of ['Network.loadingFinished', 'Network.loadingFailed']) on(done, (e) => { if (network.open.delete(e.requestId)) network.last = Date.now(); });
   await send('Network.enable');
   const close = () => { try { toChrome.end(); } catch {} proc.kill(); try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} };
-  return { send, evaluate, on, network, close };
+  return { send, evaluate, call, on, network, close };
 }
