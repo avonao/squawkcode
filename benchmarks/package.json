@@ -1,0 +1,10 @@
+{
+  "name": "squawkcode-benchmarks",
+  "private": true,
+  "type": "module",
+  "description": "What SquawkCode saves and what its comparison finds, measured on a generated site. Not part of the tool.",
+  "dependencies": {
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0"
+  }
+}

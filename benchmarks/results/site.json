@@ -1,0 +1,270 @@
+{
+  "date": "2026-11-25",
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor",
+    "cores": 2,
+    "node": "v22.23.4",
+    "platform": "linux x64"
+  },
+  "site": {
+    "components": 120,
+    "pages": 4,
+    "elementsPerPage": 40,
+    "classes": 854
+  },
+  "size": [
+    {
+      "id": "plain",
+      "label": "As written",
+      "css": {
+        "raw": 126554,
+        "gzip": 8930,
+        "brotli": 6651
+      },
+      "html": {
+        "raw": 46803,
+        "gzip": 7547,
+        "brotli": 5660
+      },
+      "js": {
+        "raw": 560,
+        "gzip": 289,
+        "brotli": 214
+      },
+      "total": {
+        "raw": 173917,
+        "gzip": 16766,
+        "brotli": 12525
+      }
+    },
+    {
+      "id": "hash",
+      "label": "Hashed names",
+      "css": {
+        "raw": 113781,
+        "gzip": 10427,
+        "brotli": 7639
+      },
+      "html": {
+        "raw": 38936,
+        "gzip": 9280,
+        "brotli": 7610
+      },
+      "js": {
+        "raw": 541,
+        "gzip": 288,
+        "brotli": 225
+      },
+      "total": {
+        "raw": 153258,
+        "gzip": 19995,
+        "brotli": 15474
+      },
+      "transformMs": 31,
+      "averageNameLength": 6
+    },
+    {
+      "id": "min",
+      "label": "Minimal names",
+      "css": {
+        "raw": 105994,
+        "gzip": 8089,
+        "brotli": 5577
+      },
+      "html": {
+        "raw": 34630,
+        "gzip": 6854,
+        "brotli": 5383
+      },
+      "js": {
+        "raw": 515,
+        "gzip": 271,
+        "brotli": 197
+      },
+      "total": {
+        "raw": 141139,
+        "gzip": 15214,
+        "brotli": 11157
+      },
+      "transformMs": 28,
+      "averageNameLength": 1.94
+    }
+  ],
+  "speed": {
+    "pageViews": 8,
+    "baseline": {
+      "version": "0.1.0",
+      "seconds": 73.1
+    },
+    "sameCapturesOneAtATime": 15.4,
+    "defaults": 9.8,
+    "concurrency": 2
+  },
+  "detect": {
+    "mutations": 20,
+    "computedStyle": 20,
+    "screenshot": 5,
+    "rows": [
+      {
+        "what": "a card's padding, 1px more",
+        "where": "at rest",
+        "computedStyle": true,
+        "screenshot": true,
+        "pixels": 3508,
+        "seconds": 39.9
+      },
+      {
+        "what": "the current link's weight",
+        "where": "at rest",
+        "computedStyle": true,
+        "screenshot": true,
+        "pixels": 1092,
+        "seconds": 68.4
+      },
+      {
+        "what": "an arrow glyph in a button",
+        "where": "at rest",
+        "computedStyle": true,
+        "screenshot": true,
+        "pixels": 1312,
+        "seconds": 60.3
+      },
+      {
+        "what": "one column gap, 2px more",
+        "where": "at rest",
+        "computedStyle": true,
+        "screenshot": true,
+        "pixels": 271440,
+        "seconds": 86.3
+      },
+      {
+        "what": "the mobile navigation wraps no more",
+        "where": "at rest (mobile)",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 40.4
+      },
+      {
+        "what": "text colour, one step of 255",
+        "where": "at rest, below what an eye sees",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 87.4
+      },
+      {
+        "what": "line height 1.5 to 1.51",
+        "where": "at rest, below a pixel per line",
+        "computedStyle": true,
+        "screenshot": true,
+        "pixels": 99330,
+        "seconds": 89.3
+      },
+      {
+        "what": "a link's hover background",
+        "where": "hover",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 26.4
+      },
+      {
+        "what": "a card's hover border",
+        "where": "hover",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 19.4
+      },
+      {
+        "what": "a button's hover background",
+        "where": "hover",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 19
+      },
+      {
+        "what": "a link's focus ring",
+        "where": "keyboard focus",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 25.5
+      },
+      {
+        "what": "a button's focus ring offset",
+        "where": "keyboard focus",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 19
+      },
+      {
+        "what": "the dark theme's background",
+        "where": "dark theme (a class)",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 33
+      },
+      {
+        "what": "a featured card in the dark theme",
+        "where": "dark theme (a class)",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 25.4
+      },
+      {
+        "what": "a rule for a dark system setting",
+        "where": "prefers-color-scheme: dark",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 31.9
+      },
+      {
+        "what": "the navigation shows in print",
+        "where": "print",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 32.1
+      },
+      {
+        "what": "the open dialog's padding",
+        "where": "after a click",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 54.5
+      },
+      {
+        "what": "the open dialog's backdrop",
+        "where": "after a click",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 54.3
+      },
+      {
+        "what": "a button's cursor",
+        "where": "nothing is painted",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 59.9
+      },
+      {
+        "what": "a transition's duration",
+        "where": "nothing is painted",
+        "computedStyle": true,
+        "screenshot": false,
+        "pixels": 0,
+        "seconds": 39.5
+      }
+    ]
+  }
+}

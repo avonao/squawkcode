@@ -92,8 +92,51 @@ test('class-attribute selectors and html strings', () => {
 });
 
 test('hashes are deterministic and valid identifiers', () => {
-  const a = site({ 'src/a.css': '.foo { a:1 } .bar { a:1 }' }).r.map;
-  const b = site({ 'src/a.css': '.foo { a:1 } .bar { a:1 }' }).r.map;
+  const a = site({ 'src/a.css': '.foo { a:1 } .bar { a:1 }' }, { names: 'hash' }).r.map;
+  const b = site({ 'src/a.css': '.foo { a:1 } .bar { a:1 }' }, { names: 'hash' }).r.map;
   assert.deepEqual([...a], [...b]);
   for (const v of a.values()) assert.match(v, /^[a-z][a-z0-9]+$/);
+});
+
+test('what is assigned to className or set as the class attribute is a class list', () => {
+  const { r, read } = site({
+    'src/a.css': '.card { a: 1 } .open { b: 1 } .wide { c: 1 }',
+    'src/a.js': 'el.className = "card open"; el.className += " wide"; el.setAttribute("class", "card"); el.classList.value = "open"; h("div", { className: "card wide", title: "plain words" });',
+  });
+  const m = r.map; const out = read('src/a.js');
+  assert.deepEqual(r.issues, []);
+  assert.ok(out.includes(`el.className = "${m.get('card')} ${m.get('open')}"`));
+  assert.ok(out.includes(`el.className += " ${m.get('wide')}"`));
+  assert.ok(out.includes(`el.setAttribute("class", "${m.get('card')}")`));
+  assert.ok(out.includes(`el.classList.value = "${m.get('open')}"`));
+  assert.ok(out.includes(`{ className: "${m.get('card')} ${m.get('wide')}", title: "plain words" }`));
+});
+
+test('a name next to an expression is whole when the expression starts with a space or is empty, and a piece of a name otherwise', () => {
+  const css = '.card { a: 1 } .card--wide { b: 1 } .open { c: 1 } .slide-1 { d: 1 } .card__title { e: 1 }';
+  const whole = site({
+    'src/a.css': css,
+    'src/a.tsx': 'export const A = ({ wide, cls }) => <i className={"card" + (wide ? " card--wide" : "")}><b className={`card${wide ? " card--wide" : ""} open`} /><u className={"card " + cls + " open"} /></i>;',
+  });
+  const m = whole.r.map; const out = whole.read('src/a.tsx');
+  assert.deepEqual(whole.r.issues, []);
+  assert.ok(out.includes(`className={"${m.get('card')}" + (wide ? " ${m.get('card--wide')}" : "")}`));
+  assert.ok(out.includes('className={`' + m.get('card') + '${wide ? " ' + m.get('card--wide') + '" : ""} ' + m.get('open') + '`}'));
+  assert.ok(out.includes(`className={"${m.get('card')} " + cls + " ${m.get('open')}"}`));
+  // pieces: reported, and left as they were written
+  const pieces = [
+    ['el.className = `card--${size}`;', '"card--"'],
+    ['el.classList.add("slide-" + n);', '"slide-"'],
+    ['const A = ({ b }) => <i className={`${b}__title`} />;', '"__title"'],
+    ['const A = ({ cls }) => <i className={"card" + cls} />;', '"card"'],
+  ];
+  for (const [code, piece] of pieces) {
+    const { r, read } = site({ 'src/a.css': css, 'src/a.tsx': code });
+    assert.equal(r.issues.length, 1, code);
+    assert.equal(r.issues[0].kind, 'dynamic-class');
+    assert.ok(r.issues[0].detail.startsWith(piece), r.issues[0].detail);
+    assert.equal(read('src/a.tsx'), code);
+  }
+  // a piece that no renamed class starts or ends with is somebody else's name
+  assert.deepEqual(site({ 'src/a.css': css, 'src/a.tsx': 'const A = ({ n }) => <i className={`icon-${n} card`} />;' }).r.issues, []);
 });
